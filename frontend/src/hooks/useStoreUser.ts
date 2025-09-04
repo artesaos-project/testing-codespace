@@ -6,27 +6,37 @@ const useStoreUser = create<UserStore>()(
   persist(
     (set) => ({
       user: {
-        userName: "",
-        userPhoto: "",
+        userId: undefined,
+        userName: undefined,
+        userPhoto: undefined,
+        artisanUserName: undefined,
         isAuthenticated: false,
         isModerator: false,
+        isArtisan: false,
       },
       setUser: (user: UserProps) =>
         set(() => ({
           user: {
+            userId: user.userId,
             userName: user.userName,
             userPhoto: user.userPhoto,
+            artisanUserName: user.artisanUserName,
             isAuthenticated: true,
             isModerator: user.isModerator,
+            isArtisan: user.isArtisan,
           },
-        })),
+        }))
+      ,
       resetStore: () =>
         set(() => ({
           user: {
-            userName: "",
-            userPhoto: "",
+            userId: undefined,
+            userName: undefined,
+            userPhoto: undefined,
+            artisanUserName: undefined,
             isAuthenticated: false,
             isModerator: false,
+            isArtisan: false,
           },
         })),
     }),

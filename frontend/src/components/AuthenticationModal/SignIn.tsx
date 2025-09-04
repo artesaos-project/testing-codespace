@@ -12,6 +12,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 import useStoreUser from "@/hooks/useStoreUser";
 import { UserProps } from "@/types/UserProps";
+import { authApi } from "@/services/api";
 import Image from "next/image";
 
 const loginSchema = z.object({
@@ -55,32 +56,25 @@ function SignIn({
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     try {
-      const response = await fetch('https://verbose-space-dollop-jwg7vpv9v64fq9x9-3333.app.github.dev/sessions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(data),
-      });
-      const result = await response.json();
+      const result = await authApi.signIn(data);
 
-      if (response.ok) {
-        const isModerator = result.roles.includes("MODERATOR") ? true : false;
-        const user: UserProps = {
-          userName: result.name,
-          userPhoto: result.avatar,
-          isModerator: isModerator
-        }
-        setUser(user);
-        onSuccess();
-
-      } else {
-        const errorData = errorMessages[result.message];
-        setBackendError(errorData);
+      const isModerator = result.roles.includes("MODERATOR");
+      const isArtisan = result.roles.includes("ARTISAN");
+      const user: UserProps = {
+        userId: result.userId,
+        userName: result.name,
+        artisanUserName: result.artisanUserName,
+        userPhoto: result.avatar,
+        isModerator: isModerator,
+        isArtisan: isArtisan,
       }
-    } catch (errorData) {
-      console.error('Erro:', errorData);
+      setUser(user);
+      onSuccess();
+
+    } catch (error: any) {
+      const errorData = errorMessages[error.message] || 'Erro ao fazer login';
+      setBackendError(errorData);
+      console.error('Erro:', error);
     } finally {
       setIsLoading(false);
     }
@@ -92,7 +86,7 @@ function SignIn({
         {children}
         <div className="mt-6 mb-14 ">
 
-          <Image src="/horizontal-logo.svg" alt="Imagem de boas-vindas" width={120} height={59}/>
+          <Image src="/horizontal-logo.svg" alt="Imagem de boas-vindas" width={120} height={59} />
 
           <DialogTitle className="text-5xl md:text-[45px] mt-8 font-bold">Olá!</DialogTitle>
           <p className="text-xl italic mt-2">Bom te ver de novo!</p>

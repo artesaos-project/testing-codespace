@@ -124,9 +124,12 @@ export default function SignUp({
         const userId = created.userData?.id || created.userData?.userId;
 
         const userData: UserProps = {
+          userId: userId,
           userName: created.userData.name,
+          artisanUserName: created.userData.artisanUserName,
           userPhoto: created.userData.avatar,
-          isModerator: created.userData.roles?.includes("MODERATOR") || false,
+          isModerator: created.userData.roles.includes("MODERATOR") || false,
+          isArtisan: created.userData.roles.includes("ARTISAN") || false,
         };
 
         onArtisanSignup?.(userId, userData);

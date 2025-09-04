@@ -9,6 +9,8 @@ import { FaRegImage } from "react-icons/fa6";
 import { ProductForm } from "@/types/ProductForm";
 import InputField from "../../components/InputField";
 import { TbSelect, TbTrash } from "react-icons/tb";
+import { IoAdd } from "react-icons/io5";
+import { productApi, uploadApi } from "@/services/api";
 
 const AddProductPage: React.FC = () => {
   const router = useRouter();
@@ -26,6 +28,7 @@ const AddProductPage: React.FC = () => {
   const [photos, setPhotos] = useState<File[]>([]);
   const [selectedPhotos, setSelectedPhotos] = useState<number[]>([]);
   const [photoIds, setPhotoIds] = useState<string[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
 
   const handleInputChange = (
     field: keyof ProductForm,
@@ -59,40 +62,41 @@ const AddProductPage: React.FC = () => {
     document.getElementById("photo-upload")?.click();
   };
 
-  const handleImage = (file: File) => {
-    const formData = new FormData();
-    formData.append("file", file);
-
-    const res = fetch("https://verbose-space-dollop-jwg7vpv9v64fq9x9-3333.app.github.dev/attachments", {
-      method: "POST",
-      credentials: "include",
-      body: formData,
-    });
-
-    return res;
+  const handleImage = async (file: File): Promise<{ attachmentId: string }> => {
+    try {
+      const result = await uploadApi.uploadFile(file);
+      return result;
+    } catch (error) {
+      console.error("Erro ao fazer upload da foto:", error);
+      throw error;
+    }
   };
 
   useEffect(() => {
     const uploadPhotos = async () => {
+      if (photos.length === 0) {
+        setPhotoIds([]);
+        return;
+      }
+
+      setIsUploading(true);
       const uploadedPhotoIds: string[] = [];
-      for (const photo of photos) {
-        try {
-          const response = await handleImage(photo);
-          const result = await response.json();
+      
+      try {
+        for (const photo of photos) {
+          const result = await handleImage(photo);
           uploadedPhotoIds.push(result.attachmentId);
           console.log("Uploaded photo ID:", result.attachmentId);
-        } catch (error) {
-          console.error("Erro ao fazer upload da foto:", error);
         }
+        setPhotoIds(uploadedPhotoIds);
+      } catch (error) {
+        console.error("Erro ao fazer upload das fotos:", error);
+      } finally {
+        setIsUploading(false);
       }
-      setPhotoIds(uploadedPhotoIds);
     };
 
-    if (photos.length > 0) {
-      uploadPhotos();
-    } else {
-      setPhotoIds([]);
-    }
+    uploadPhotos();
   }, [photos]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -109,6 +113,11 @@ const AddProductPage: React.FC = () => {
       return;
     }
 
+    if (isUploading) {
+      console.error("Aguarde o upload das fotos ser concluído");
+      return;
+    }
+
     const productData = {
       title: form.name.trim(),
       description: form.description.trim(),
@@ -121,28 +130,19 @@ const AddProductPage: React.FC = () => {
       necessaryDays: form.isCustomOrder ? parseInt(form.necessaryDays) || 0 : 0,
     };
 
-    console.log("Form submitted:", productData);
-    console.log("Photos:", photos);
-
     try {
-      const res = await fetch("https://verbose-space-dollop-jwg7vpv9v64fq9x9-3333.app.github.dev/products", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(productData),
-        credentials: "include",
-      });
+      await productApi.create(productData);
+      console.log("Produto adicionado com sucesso!");
+      router.back();
+    } catch (error: any) {
+      console.error("Erro ao adicionar produto:", error);
 
-      if (res.ok) {
-        console.log("Produto adicionado com sucesso!");
-        router.back();
+      if (error.message.includes("401") || error.message === "UNAUTHORIZED") {
+        alert("Você não tem permissão para adicionar produtos.");
+        router.push("/");
       } else {
-        const errorData = await res.json();
-        console.error("Erro ao adicionar produto:", errorData);
+        alert("Erro ao adicionar produto. Tente novamente.");
       }
-    } catch (error) {
-      console.error("Erro na requisição:", error);
     }
   };
 
@@ -159,8 +159,8 @@ const AddProductPage: React.FC = () => {
     <div
       className={`${
         index === 0
-          ? "col-span-2 row-span-2 w-full h-44"
-          : "col-span-1 row-span-1 w-full h-20"
+          ? "lg:col-span-2 lg:row-span-2 lg:w-full lg:h-44 col-span-4 row-span-1 w-full h-40"
+          : "lg:col-span-1 lg:row-span-1 lg:w-full lg:h-20 col-span-1 row-span-1 w-full h-20"
       } border-2 rounded-lg cursor-pointer transition-all flex items-center justify-center
         ${
           photo
@@ -179,7 +179,7 @@ const AddProductPage: React.FC = () => {
             className="w-full h-full"
           />
           {isSelected && (
-            <div className="bg-red-400 bg-opacity-20 rounded-lg flex items-center justify-center">
+            <div className="bg-salmon rounded-lg flex items-center justify-center">
               <div className="w-4 h-4 bg-salmon rounded-full"></div>
             </div>
           )}
@@ -200,7 +200,7 @@ const AddProductPage: React.FC = () => {
     <div className="min-h-screen bg-[#A6E3E9] text-midnight">
       <Header />
 
-      <div className="w-8/12 mx-auto pt-10">
+      <div className="w-10/12 mx-auto pt-10">
         <div className="flex items-center mb-6">
           <ArrowLeft
             className="w-6 h-6 text-gray-700 mr-3 cursor-pointer hover:text-gray-900"
@@ -208,10 +208,268 @@ const AddProductPage: React.FC = () => {
           />
           <h1 className="text-xl font-bold text-gray-800">Adicionar produto</h1>
         </div>
-
+        
         <form onSubmit={handleSubmit}>
-          <div className="bg-white rounded-2xl shadow-lg p-8 mb-10">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="bg-white rounded-2xl shadow-lg p-4 mb-10">
+            {/* Mobile */}
+            <div className="lg:hidden">
+              <h2 className="text-lg font-bold text-salmon mb-6">
+                Informações
+              </h2>
+
+              <div className="space-y-4 mb-8">
+                <div>
+                  <InputField
+                    label="Nome do Produto"
+                    type="text"
+                    value={form.name}
+                    onChange={(value) => handleInputChange("name", value)}
+                    placeholder="Digite o nome do produto"
+                    required={true}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Descrição *
+                  </label>
+                  <textarea
+                    required
+                    value={form.description}
+                    onChange={(e) =>
+                      handleInputChange("description", e.target.value)
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sakura focus:border-transparent outline-none transition-all"
+                    placeholder="Digite a descrição do produto"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Categoria *
+                  </label>
+                  <select
+                    required
+                    value={form.category}
+                    onChange={(e) =>
+                      handleInputChange("category", e.target.value)
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sakura focus:border-transparent outline-none transition-all"
+                  >
+                    <option value="">Selecione uma categoria</option>
+                    <option value="1">Cerâmica</option>
+                    <option value="2">Madeira</option>
+                    <option value="3">Tecido</option>
+                    <option value="4">Metal</option>
+                    <option value="5">Outros</option>
+                  </select>
+                </div>
+
+                <div>
+                  <InputField
+                    label="Técnica"
+                    type="text"
+                    value={form.technical}
+                    onChange={(value) =>
+                      handleInputChange("technical", value)
+                    }
+                    placeholder="Digite a técnica utilizada"
+                  />
+                </div>
+              </div>
+
+              <div className="mb-8">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="text-lg font-semibold text-salmon">
+                      Mídias
+                    </h2>
+                    <h3 className="text-sm text-midnight font-bold">Foto(s)</h3>
+                  </div>
+                  {selectedPhotos.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={removeSelectedPhotos}
+                      className="flex items-center space-x-1 text-sakura hover:text-salmon"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span className="text-sm">
+                        Remover ({selectedPhotos.length})
+                      </span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="mb-4 lg:hidden">
+                  <div className="mb-3">
+                    <PhotoSlot
+                      index={0}
+                      photo={photos[0]}
+                      onClick={() => {
+                        if (photos[0]) {
+                          handlePhotoSelect(0);
+                        } else {
+                          document.getElementById("photo-upload")?.click();
+                        }
+                      }}
+                      isSelected={selectedPhotos.includes(0)}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-2">
+                    {Array.from({ length: 4 }).map((_, i) => {
+                      const index = i + 1;
+                      return (
+                        <PhotoSlot
+                          key={index}
+                          index={index}
+                          photo={photos[index]}
+                          onClick={() => {
+                            if (photos[index]) {
+                              handlePhotoSelect(index);
+                            } else {
+                              document.getElementById("photo-upload")?.click();
+                            }
+                          }}
+                          isSelected={selectedPhotos.includes(index)}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <input
+                  id="photo-upload"
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                />
+
+                <p className="text-xs text-gray-500 mb-4">
+                  Adicione até 5 fotos do seu produto. Clique nos quadrados para
+                  adicionar ou selecionar fotos.
+                </p>
+
+                <div className="flex mb-2 text-xs font-semibold">
+                  <button
+                    type="button"
+                    className="p-2 w-full bg-olivine text-white rounded-lg hover:bg-green-600 transition-all"
+                    onClick={triggerFileUpload}
+                    disabled={photos.length >= 5}
+                  >
+                    + Adicionar Foto (Maximo 5)
+                  </button>
+                </div>
+
+                <div className="flex flex-col mb-4 text-xs space-x-2 font-semibold">
+                  <button
+                    type="button"
+                    className="flex px-2 py-2 mb-2 justify-center items-center w-full border-2 border-sakura ring-sakura text-sakura rounded-lg hover:bg-sakura hover:text-white transition-all"
+                    onClick={() =>
+                      setSelectedPhotos(photos.map((_, index) => index))
+                    }
+                    disabled={photos.length === 0}
+                  >
+                    <TbSelect />
+                    Selecionar Fotos
+                  </button>
+
+                  <button
+                    type="button"
+                    className="flex px-2 py-2 justify-center items-center w-full bg-sakura text-white rounded-lg hover:bg-salmon transition-all"
+                    onClick={removeSelectedPhotos}
+                  >
+                    <TbTrash />
+                    Remover Fotos Selecionadas
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center mb-4 text-salmon font-bold">
+                  <span>Preço e Estoque</span>
+                </div>
+                
+                <div className="space-y-4">
+                  <InputField
+                    label="Preço Unitário"
+                    type="number"
+                    required={true}
+                    min="0"
+                    step="0.01"
+                    value={form.unitPrice}
+                    onChange={(value) =>
+                      handleInputChange("unitPrice", value)
+                    }
+                    placeholder="0,00"
+                  />
+
+                  <InputField
+                    label="Estoque"
+                    type="number"
+                    required={true}
+                    min="0"
+                    value={form.stock}
+                    onChange={(value) =>
+                      handleInputChange("stock", value)
+                    }
+                    placeholder="Quantidade"
+                  />
+
+                  <div className="p-4 ring-2 ring-sakura rounded-2xl">
+                    <div className="font-bold text-sm mb-3">
+                      Produto sob encomenda?
+                    </div>
+                    <div className="flex gap-4 mb-3">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="isCustomOrder"
+                          value="true"
+                          checked={form.isCustomOrder === true}
+                          onChange={() =>
+                            handleInputChange("isCustomOrder", true)
+                          }
+                          className="w-5 h-5 accent-sakura"
+                        />
+                        <label className="text-sm">Sim</label>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="isCustomOrder"
+                          value="false"
+                          checked={form.isCustomOrder === false}
+                          onChange={() =>
+                            handleInputChange("isCustomOrder", false)
+                          }
+                          className="w-5 h-5 accent-sakura"
+                        />
+                        <label className="text-sm">Não</label>
+                      </div>
+                    </div>
+                    
+                    <InputField
+                      label="Dias Necessários"
+                      type="number"
+                      min="0"
+                      value={form.necessaryDays}
+                      onChange={(value) =>
+                        handleInputChange("necessaryDays", value)
+                      }
+                      placeholder="Quantidade de dias"
+                      disabled={!form.isCustomOrder}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Desktop */}
+            <div className="hidden lg:grid grid-cols-1 lg:grid-cols-2 gap-8">
               <div>
                 <h2 className="text-lg font-bold text-salmon mb-6">
                   Informações
@@ -449,29 +707,28 @@ const AddProductPage: React.FC = () => {
                     Remover Fotos Selecionadas
                   </button>
                 </div>
-
-                <div className="flex justify-end text-sm space-x-4">
-                  <button
-                    type="button"
-                    onClick={handleBack}
-                    className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-6 py-2 bg-[#2AAA4C] text-white rounded-lg hover:bg-green-600 transition-all"
-                  >
-                    Adicionar Produto
-                  </button>
-                </div>
               </div>
+            </div>
+
+            <div className="flex w-full text-sm space-x-4 mt-4">
+              <button
+                type="submit"
+                disabled={isUploading}
+                className={`flex px-6 gap-2 py-2 w-full justify-center items-center rounded-lg transition-all ${
+                  isUploading 
+                    ? "bg-gray-400 cursor-not-allowed" 
+                    : "bg-[#2AAA4C] hover:bg-green-600"
+                } text-white`}
+              >
+                {isUploading ? "Enviando fotos..." : "Adicionar Produto"}
+                <IoAdd className="bg-gray-200/50 rounded-2xl" color="white" />
+              </button>
             </div>
           </div>
         </form>
       </div>
 
-      <Footer newsSubscription={false} />
+      <Footer newsSubscription={true} />
     </div>
   );
 };
